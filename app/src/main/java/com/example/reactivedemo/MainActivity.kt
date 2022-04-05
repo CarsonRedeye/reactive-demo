@@ -11,13 +11,12 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 class MainActivity : AppCompatActivity() {
-
-    val randomDogUrl = "https://dog.ceo/api/breeds/image/random"
-
-    val responseCallback: ((String) -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,10 +29,12 @@ class MainActivity : AppCompatActivity() {
         animateText(headingTextView)
 
         button.setOnClickListener {
-            val dog = fetchRandomDog()
-            urlTextView.text = dog.message
-            val bitmap = fetchImage(dog.message)
-            image.setImageBitmap(bitmap)
+            fetchRandomDog { dog ->
+                urlTextView.text = dog.message
+                fetchImage(dog.message) { bitmap ->
+                    image.setImageBitmap(bitmap)
+                }
+            }
         }
     }
 
@@ -49,20 +50,6 @@ class MainActivity : AppCompatActivity() {
         textView.startAnimation(rotate)
     }
 
-    fun fetchRandomDog(): DogResponse {
-        return runBlocking {
-            client.get(randomDogUrl)
-        }
-    }
-
-    private fun fetchImage(url: String): Bitmap {
-        return runBlocking {
-            val dogResponse = client.get<DogResponse>(randomDogUrl)
-            val imageResponse: HttpResponse = client.get(dogResponse.message)
-            val bytes = imageResponse.readBytes()
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)!!
-        }
-    }
 
 //    private fun makeSlowRequestCallback(responseCallback: (Int) -> Unit) {
 //        GlobalScope.launch {
@@ -70,6 +57,23 @@ class MainActivity : AppCompatActivity() {
 //            responseCallback(response.status.value)
 //        }
 //    }
+}
+
+
+private fun fetchRandomDog(dogCallback: (DogResponse) -> Unit) {
+    MainScope().launch {
+        val dog = client.get<DogResponse>("https://dog.ceo/api/breeds/image/random")
+        dogCallback(dog)
+    }
+}
+
+private fun fetchImage(url: String, imageCallback: (Bitmap) -> Unit) {
+    MainScope().launch {
+        val imageResponse: HttpResponse = client.get(url)
+        val bytes = imageResponse.readBytes()
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)!!
+        imageCallback(bitmap)
+    }
 }
 
 @kotlinx.serialization.Serializable
