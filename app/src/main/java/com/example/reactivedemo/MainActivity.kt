@@ -2,6 +2,8 @@ package com.example.reactivedemo
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.drawable.Animatable
+import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.view.animation.Animation
 import android.view.animation.RotateAnimation
@@ -9,11 +11,13 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.serialization.SerialName
 import reactivecircus.flowbinding.android.view.clicks
 
 class MainActivity : AppCompatActivity() {
@@ -21,31 +25,50 @@ class MainActivity : AppCompatActivity() {
     private lateinit var headingTextView: TextView
     private lateinit var dogButton: Button
     private lateinit var image: ImageView
-    private lateinit var urlTextView: TextView
+    private lateinit var caption: TextView
 
     private var imageUrl = ""
+
+    val viewState: Flow<ViewState>
+        get() = dogButton.clicks()
+            .transform {
+                emit(ViewState.Loading)
+                val dog = fetchRandomDog()
+                emit(ViewState.DogView(bitmap = fetchImage(dog.url), caption = dog.url))
+            }
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
-        headingTextView = findViewById(R.id.animated_text)
-        dogButton = findViewById(R.id.request_dog_button)
-        image = findViewById(R.id.my_image)
-        urlTextView = findViewById(R.id.image_url_text)
-
+        setupViewReferences()
         animateText(headingTextView)
 
-        dogButton.clicks().map { }
-        dogButton.setOnClickListener {
-            fetchRandomDog { dog ->
-                imageUrl = dog.message
-                fetchImage(imageUrl) { bitmap ->
-                    urlTextView.text = imageUrl
-                    image.setImageBitmap(bitmap)
+        MainScope().launch {
+            viewState.collect { viewState ->
+                when (viewState) {
+                    ViewState.Placeholder -> image.setImageDrawable(resources.getDrawable(R.drawable.placeholder))
+                    ViewState.Loading -> setImageLoadingSpinner()
+                    is ViewState.DogView -> {
+                        image.setImageBitmap(viewState.bitmap)
+                        caption.setText(viewState.caption)
+                    }
                 }
             }
         }
+    }
+
+    private fun setupViewReferences() {
+        headingTextView = findViewById(R.id.animated_text)
+        dogButton = findViewById(R.id.request_dog_button)
+        image = findViewById(R.id.dog_image)
+        caption = findViewById(R.id.caption_text)
+    }
+
+    private fun setImageLoadingSpinner() {
+        val avd: Drawable? = AnimatedVectorDrawableCompat.create(this, R.drawable.download_spinner)
+        image.setImageDrawable(avd)
+        (avd as Animatable?)?.start()
     }
 }
 
@@ -75,6 +98,16 @@ private suspend fun fetchImage(url: String): Bitmap {
     return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)!!
 }
 
+private suspend fun decodeImageSlow(url: String): Bitmap {
+    val imageResponse: HttpResponse = client.get(url)
+    val bytes = imageResponse.readBytes()
+    repeat(100) {
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)!!
+    }
+    return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)!!
+}
+
+
 private fun animateText(textView: TextView) {
     val rotate = RotateAnimation(
         0f, 360f,
@@ -88,6 +121,10 @@ private fun animateText(textView: TextView) {
 }
 
 @kotlinx.serialization.Serializable
-data class DogResponse(val message: String, val status: String)
+data class DogResponse(@SerialName("message") val url: String, val status: String)
 
-data class DogView(val bitmap: Bitmap, val caption: String)
+sealed class ViewState {
+    object Placeholder : ViewState()
+    object Loading : ViewState()
+    data class DogView(val bitmap: Bitmap, val caption: String) : ViewState()
+}

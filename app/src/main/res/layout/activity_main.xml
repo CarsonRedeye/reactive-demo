@@ -22,13 +22,13 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Request a dog"
-        app:layout_constraintBottom_toTopOf="@+id/my_image"
+        app:layout_constraintBottom_toTopOf="@+id/dog_image"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"
         app:layout_constraintTop_toBottomOf="@id/animated_text" />
 
     <ImageView
-        android:id="@+id/my_image"
+        android:id="@+id/dog_image"
         android:layout_width="320dp"
         android:layout_height="320dp"
         app:layout_constraintBottom_toBottomOf="parent"
@@ -38,7 +38,7 @@
         tools:srcCompat="@tools:sample/avatars" />
 
     <TextView
-        android:id="@+id/image_url_text"
+        android:id="@+id/caption_text"
         android:textAlignment="center"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -46,7 +46,7 @@
         android:layout_marginTop="8dp"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/my_image" />
+        app:layout_constraintTop_toBottomOf="@id/dog_image" />
 
 
 </androidx.constraintlayout.widget.ConstraintLayout>
