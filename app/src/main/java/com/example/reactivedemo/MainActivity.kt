@@ -10,6 +10,7 @@ import android.view.animation.RotateAnimation
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat
 import io.ktor.client.request.*
@@ -17,6 +18,7 @@ import io.ktor.client.statement.*
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.SerialName
 import reactivecircus.flowbinding.android.view.clicks
 
@@ -27,28 +29,41 @@ class MainActivity : AppCompatActivity() {
     private lateinit var image: ImageView
     private lateinit var caption: TextView
 
-    private var imageUrl = ""
-
-    val viewState: Flow<ViewState>
-        get() = dogButton.clicks()
-            .transform {
-                emit(ViewState.Loading)
-                val dog = fetchRandomDog()
-                emit(ViewState.DogView(bitmap = fetchImage(dog.url), caption = dog.url))
-            }
-
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setContent {
+
+        }
         setContentView(R.layout.activity_main)
         setupViewReferences()
         animateText(headingTextView)
 
         MainScope().launch {
-            viewState.collect { viewState ->
+            val imageFlow = dogButton.clicks()
+                .flatMapConcat {
+                    randomDogsFlow()
+                }
+                .flatMapConcat {
+                    imageFlow(it.url)
+                }
+                .collect {
+
+                }
+
+            val viewStateFlow: Flow<ViewState> = flow {
+                emit(ViewState.Placeholder)
+                val imageFlow = asdf()
+                emitAll(imageFlow)
+            }
+
+            viewStateFlow.collect { viewState ->
                 when (viewState) {
                     ViewState.Placeholder -> image.setImageDrawable(resources.getDrawable(R.drawable.placeholder))
-                    ViewState.Loading -> setImageLoadingSpinner()
+                    ViewState.Loading -> {
+                        setImageLoadingSpinner()
+                        caption.setText("")
+                    }
                     is ViewState.DogView -> {
                         image.setImageBitmap(viewState.bitmap)
                         caption.setText(viewState.caption)
@@ -57,6 +72,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+    private fun asdf(): Flow<ViewState> = dogButton.clicks()
+        .transform {
+            emit(ViewState.Loading)
+            val dog = fetchRandomDog()
+            val bitmap = fetchImage(dog.url)
+            emit(ViewState.DogView(bitmap, caption = dog.url))
+        }
 
     private fun setupViewReferences() {
         headingTextView = findViewById(R.id.animated_text)
@@ -72,6 +95,22 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
+// Blocking
+private fun fetchRandomDogBlocking(): DogResponse {
+    return runBlocking {
+        client.get("https://dog.ceo/api/breeds/image/random")
+    }
+}
+
+private fun fetchImageBlocking(url: String): Bitmap {
+    return runBlocking {
+        val imageResponse: HttpResponse = client.get(url)
+        val bytes = imageResponse.readBytes()
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)!!
+    }
+}
+
+// Callbacks
 private fun fetchRandomDog(dogCallback: (DogResponse) -> Unit) {
     MainScope().launch {
         val dog = client.get<DogResponse>("https://dog.ceo/api/breeds/image/random")
@@ -88,6 +127,7 @@ private fun fetchImage(url: String, imageCallback: (Bitmap) -> Unit) {
     }
 }
 
+// Coroutines
 private suspend fun fetchRandomDog(): DogResponse {
     return client.get("https://dog.ceo/api/breeds/image/random")
 }
@@ -107,6 +147,17 @@ private suspend fun decodeImageSlow(url: String): Bitmap {
     return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)!!
 }
 
+private fun randomDogsFlow(): Flow<DogResponse> {
+    return flow {
+        emit(fetchRandomDog())
+    }
+}
+
+private fun imageFlow(url: String): Flow<Bitmap> {
+    return flow {
+        emit(fetchImage(url))
+    }
+}
 
 private fun animateText(textView: TextView) {
     val rotate = RotateAnimation(
