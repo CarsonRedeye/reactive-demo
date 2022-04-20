@@ -2,119 +2,129 @@ package com.example.reactivedemo
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.drawable.Animatable
-import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.view.animation.Animation
 import android.view.animation.RotateAnimation
-import android.widget.Button
-import android.widget.ImageView
 import android.widget.TextView
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
-import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat
+import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.SerialName
-import reactivecircus.flowbinding.android.view.clicks
+import kotlinx.serialization.Serializable
 
+// Model
+sealed interface Model
+object Loading : Model
+object Failure : Model
+data class ShowBreeds(val breeds: List<Breed>) : Model
+
+@Serializable
+data class Breed(val name: String)
+
+// Update
+sealed interface Msg
+data class QueryUpdated(val query: String?) : Msg
+data class BreedsRetrieved(val result: Result<List<Breed>>) : Msg
+
+fun update(msg: Msg, model: Model): ModelAndCmd {
+    return when (msg) {
+        is QueryUpdated -> {
+            if (msg.query.isNullOrBlank()) {
+                ModelAndCmd(model = Loading, Cmd.None)
+            } else {
+                ModelAndCmd(
+                    model = Loading,
+                    cmd = Cmd.FetchBreeds(msg.query)
+                )
+            }
+        }
+        is BreedsRetrieved -> {
+            val newModel = msg.result.map { ShowBreeds(it) }.getOrNull() ?: model
+            ModelAndCmd(model = newModel, Cmd.None)
+        }
+    }
+}
+
+// View
+
+
+@OptIn(FlowPreview::class)
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var headingTextView: TextView
-    private lateinit var dogButton: Button
-    private lateinit var image: ImageView
-    private lateinit var caption: TextView
-
+    //private val requestBreedsSignal = MutableSharedFlow<String>(extraBufferCapacity = 16)
+    private val model = MutableStateFlow<Model>(ShowBreeds(emptyList()))
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Elm runtime
+        //textSignal.onEach { update(QueryUpdated(it), model.value) }
+//        requestBreedsSignal.onEach {
+//            val breeds = runCatching { searchBreeds(it) }
+//            updateAndRender(BreedsRetrieved(breeds), model.value)
+//        }.launchIn(MainScope())
+
+        // This reads like a sequential recipe, but it's agnostic to time. You could say it's "reactive"
+//        val breeds = textSignal
+//            .filterNotNull()
+//            .filter { it.isNotBlank() }
+//            .debounce(500)
+//
+//            // In traditional sequential code, this would necessarily block the cpu from executing other instructions.
+//            .map { searchBreedsBlocking(query = it) }
+//            .catch { it.printStackTrace() }
+
         setContent {
-
-        }
-        setContentView(R.layout.activity_main)
-        setupViewReferences()
-        animateText(headingTextView)
-
-        MainScope().launch {
-            val imageFlow = dogButton.clicks()
-                .flatMapConcat {
-                    randomDogsFlow()
-                }
-                .flatMapConcat {
-                    imageFlow(it.url)
-                }
-                .collect {
-
-                }
-
-            val viewStateFlow: Flow<ViewState> = flow {
-                emit(ViewState.Placeholder)
-                val imageFlow = asdf()
-                emitAll(imageFlow)
-            }
-
-            viewStateFlow.collect { viewState ->
-                when (viewState) {
-                    ViewState.Placeholder -> image.setImageDrawable(resources.getDrawable(R.drawable.placeholder))
-                    ViewState.Loading -> {
-                        setImageLoadingSpinner()
-                        caption.setText("")
-                    }
-                    is ViewState.DogView -> {
-                        image.setImageBitmap(viewState.bitmap)
-                        caption.setText(viewState.caption)
-                    }
-                }
-            }
+            View(
+                model,
+                textChanged = { updateAndRender(QueryUpdated(it), model.value) }
+            )
         }
     }
 
-    private fun asdf(): Flow<ViewState> = dogButton.clicks()
-        .transform {
-            emit(ViewState.Loading)
-            val dog = fetchRandomDog()
-            val bitmap = fetchImage(dog.url)
-            emit(ViewState.DogView(bitmap, caption = dog.url))
-        }
-
-    private fun setupViewReferences() {
-        headingTextView = findViewById(R.id.animated_text)
-        dogButton = findViewById(R.id.request_dog_button)
-        image = findViewById(R.id.dog_image)
-        caption = findViewById(R.id.caption_text)
+    private fun updateAndRender(msg: Msg, model: Model) {
+        val modelAndCmd = update(msg, model)
+        this.model.value = modelAndCmd.model
+        processCmd(modelAndCmd.cmd)
     }
 
-    private fun setImageLoadingSpinner() {
-        val avd: Drawable? = AnimatedVectorDrawableCompat.create(this, R.drawable.download_spinner)
-        image.setImageDrawable(avd)
-        (avd as Animatable?)?.start()
+    private fun processCmd(cmd: Cmd) {
+        when (cmd) {
+            is Cmd.FetchBreeds -> {
+                MainScope().launch {
+                    val breeds = runCatching { searchBreeds(cmd.query) }
+                    updateAndRender(BreedsRetrieved(breeds), model.value)
+                }
+            }
+            Cmd.None -> Unit
+        }
     }
 }
 
 // Blocking
-private fun fetchRandomDogBlocking(): DogResponse {
+private fun searchBreedsBlocking(query: String): List<Breed> {
     return runBlocking {
-        client.get("https://dog.ceo/api/breeds/image/random")
-    }
-}
-
-private fun fetchImageBlocking(url: String): Bitmap {
-    return runBlocking {
-        val imageResponse: HttpResponse = client.get(url)
-        val bytes = imageResponse.readBytes()
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)!!
+        client.get("https://api.thedogapi.com/v1/breeds/search") {
+            parameter("q", query)
+        }.body()
     }
 }
 
 // Callbacks
-private fun fetchRandomDog(dogCallback: (DogResponse) -> Unit) {
+private fun searchBreedsCallback(query: String, callback: (Breed) -> Unit) {
     MainScope().launch {
-        val dog = client.get<DogResponse>("https://dog.ceo/api/breeds/image/random")
-        dogCallback(dog)
+        val breedResponse: Breed =
+            client.get("https://api.thedogapi.com/v1/breeds/search") {
+                parameter("q", query)
+            }.body()
+        callback(breedResponse)
     }
 }
 
@@ -128,8 +138,10 @@ private fun fetchImage(url: String, imageCallback: (Bitmap) -> Unit) {
 }
 
 // Coroutines
-private suspend fun fetchRandomDog(): DogResponse {
-    return client.get("https://dog.ceo/api/breeds/image/random")
+private suspend fun searchBreeds(query: String): List<Breed> {
+    return client.get("https://api.thedogapi.com/v1/breeds/search") {
+        parameter("q", query)
+    }.body()
 }
 
 private suspend fun fetchImage(url: String): Bitmap {
@@ -147,11 +159,11 @@ private suspend fun decodeImageSlow(url: String): Bitmap {
     return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)!!
 }
 
-private fun randomDogsFlow(): Flow<DogResponse> {
-    return flow {
-        emit(fetchRandomDog())
-    }
-}
+//private fun randomDogsFlow(): Flow<DogResponse> {
+//    return flow {
+//        emit(searchDogs())
+//    }
+//}
 
 private fun imageFlow(url: String): Flow<Bitmap> {
     return flow {
@@ -171,11 +183,19 @@ private fun animateText(textView: TextView) {
     textView.startAnimation(rotate)
 }
 
-@kotlinx.serialization.Serializable
+@Serializable
 data class DogResponse(@SerialName("message") val url: String, val status: String)
+
 
 sealed class ViewState {
     object Placeholder : ViewState()
     object Loading : ViewState()
     data class DogView(val bitmap: Bitmap, val caption: String) : ViewState()
 }
+
+sealed interface Cmd {
+    object None : Cmd
+    data class FetchBreeds(val query: String) : Cmd
+}
+
+data class ModelAndCmd(val model: Model, val cmd: Cmd)
