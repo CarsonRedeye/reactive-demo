@@ -21,6 +21,7 @@ import kotlinx.serialization.Serializable
 
 // Model
 sealed interface Model
+
 object Loading : Model
 object Failure : Model
 data class ShowBreeds(val breeds: List<Breed>) : Model
@@ -58,8 +59,21 @@ fun update(msg: Msg, model: Model): ModelAndCmd {
 @OptIn(FlowPreview::class)
 class MainActivity : AppCompatActivity() {
 
-    //private val requestBreedsSignal = MutableSharedFlow<String>(extraBufferCapacity = 16)
-    private val model = MutableStateFlow<Model>(ShowBreeds(emptyList()))
+    private val queryUpdatedFlow = MutableStateFlow(QueryUpdated(null))
+    private val breedsRetrievedFlow = MutableStateFlow(BreedsRetrieved(Result.success(emptyList())))
+    private val msgFlow = merge(queryUpdatedFlow, breedsRetrievedFlow)
+
+    private val modelFlow = msgFlow.runningFold(
+        initial = ModelAndCmd(
+            model = ShowBreeds(emptyList()),
+            cmd = Cmd.None
+        ),
+        operation = { modelAndCmd, msg ->
+            update(msg, modelAndCmd.model)
+        }
+    ).onEach {
+        processCmd(it.cmd)
+    }.map { it.model }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,18 +95,13 @@ class MainActivity : AppCompatActivity() {
 //            .map { searchBreedsBlocking(query = it) }
 //            .catch { it.printStackTrace() }
 
+
         setContent {
             View(
-                model,
-                textChanged = { updateAndRender(QueryUpdated(it), model.value) }
+                modelFlow,
+                textChanged = { queryUpdatedFlow.value = QueryUpdated(it) }
             )
         }
-    }
-
-    private fun updateAndRender(msg: Msg, model: Model) {
-        val modelAndCmd = update(msg, model)
-        this.model.value = modelAndCmd.model
-        processCmd(modelAndCmd.cmd)
     }
 
     private fun processCmd(cmd: Cmd) {
@@ -100,7 +109,7 @@ class MainActivity : AppCompatActivity() {
             is Cmd.FetchBreeds -> {
                 MainScope().launch {
                     val breeds = runCatching { searchBreeds(cmd.query) }
-                    updateAndRender(BreedsRetrieved(breeds), model.value)
+                    breedsRetrievedFlow.value = BreedsRetrieved(breeds)
                 }
             }
             Cmd.None -> Unit

@@ -38,12 +38,12 @@ fun View(
                 .padding(top = 16.dp)
                 .fillMaxWidth()
         ) {
-            AnimatedShake(
-                animationStart = AnimationStarter.StartImmediately,
-                repeatInfinitely = true
-            ) {
-                Text("Cool animations")
-            }
+//            AnimatedShake(
+//                animationStart = AnimationStarter.StartImmediately,
+//                repeatInfinitely = true
+//            ) {
+//                Text("Cool animations")
+//            }
 
             var text by remember { mutableStateOf("") }
             OutlinedTextField(
