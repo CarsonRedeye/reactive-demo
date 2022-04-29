@@ -10,6 +10,11 @@ import android.view.animation.RotateAnimation
 import android.widget.TextView
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
+import com.airbnb.mvrx.Mavericks
+import com.airbnb.mvrx.MavericksState
+import com.airbnb.mvrx.MavericksView
+import com.airbnb.mvrx.compose.collectAsState
+import com.airbnb.mvrx.compose.mavericksActivityViewModel
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -58,7 +63,7 @@ fun update(msg: Msg, model: Model): ModelAndCmd {
 
 
 @OptIn(FlowPreview::class)
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), MavericksView {
 
     private val queryFlow = MutableStateFlow<String?>(null)
 
@@ -102,12 +107,14 @@ class MainActivity : AppCompatActivity() {
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+
         super.onCreate(savedInstanceState)
 
         setContent {
+            val viewModel: MainViewModel = mavericksActivityViewModel()
             View(
-                modelFlowRx,
-                textChanged = { queryFlow.value = it }
+                viewModel.collectAsState(),
+                textChanged = { viewModel.queryUpdated(it) }
             )
         }
     }
@@ -123,6 +130,10 @@ class MainActivity : AppCompatActivity() {
             }
             Cmd.None -> Unit
         }
+    }
+
+    override fun invalidate() {
+        TODO("Not yet implemented")
     }
 }
 
@@ -156,19 +167,19 @@ private fun fetchImage(url: String, imageCallback: (Bitmap) -> Unit) {
 }
 
 // Coroutines
-private suspend fun searchBreeds(query: String): List<Breed> {
+suspend fun searchBreeds(query: String): List<Breed> {
     return client.get("https://api.thedogapi.com/v1/breeds/search") {
         parameter("q", query)
     }.body()
 }
 
-private suspend fun fetchImage(url: String): Bitmap {
+suspend fun fetchImage(url: String): Bitmap {
     val imageResponse: HttpResponse = client.get(url)
     val bytes = imageResponse.readBytes()
     return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)!!
 }
 
-private suspend fun decodeImageSlow(url: String): Bitmap {
+suspend fun decodeImageSlow(url: String): Bitmap {
     val imageResponse: HttpResponse = client.get(url)
     val bytes = imageResponse.readBytes()
     repeat(100) {
@@ -189,21 +200,8 @@ private fun imageFlow(url: String): Flow<Bitmap> {
     }
 }
 
-private fun animateText(textView: TextView) {
-    val rotate = RotateAnimation(
-        0f, 360f,
-        Animation.RELATIVE_TO_SELF, 0.5f,
-        Animation.RELATIVE_TO_SELF, 0.5f
-    )
-
-    rotate.duration = 1500
-    rotate.repeatCount = Animation.INFINITE
-    textView.startAnimation(rotate)
-}
-
 @Serializable
 data class DogResponse(@SerialName("message") val url: String, val status: String)
-
 
 sealed class ViewState {
     object Placeholder : ViewState()

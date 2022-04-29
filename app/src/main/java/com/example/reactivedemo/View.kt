@@ -14,20 +14,28 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
+import com.airbnb.mvrx.Fail
+import com.airbnb.mvrx.Success
+import com.airbnb.mvrx.Uninitialized
 
+@JvmName("MavericksView")
 @Composable
 fun View(
-    model: Model,
+    mavericksModel: State<MavericksModel>,
     textChanged: (String) -> Unit
 ) {
-    View(flowOf(model), textChanged)
+    val model = when (val async = mavericksModel.value.breedsState) {
+        Uninitialized -> Blank
+        is com.airbnb.mvrx.Loading -> Loading
+        is Success -> BreedsList(async.invoke())
+        is Fail -> Failure
+    }
+    View(derivedStateOf { model }, textChanged)
 }
 
 @Composable
 fun View(
-    modelFlow: Flow<Model>,
+    modelState: State<Model>,
     textChanged: (String) -> Unit
 ) {
     Scaffold {
@@ -54,7 +62,6 @@ fun View(
                 }
             )
 
-            val modelState = modelFlow.collectAsState(initial = BreedsList(emptyList()))
             when (val model = modelState.value) {
                 Blank -> Unit
                 Loading -> CircularProgressIndicator()
