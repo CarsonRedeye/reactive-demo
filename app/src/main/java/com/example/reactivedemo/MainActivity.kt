@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalCoroutinesApi::class)
+
 package com.example.reactivedemo
 
 import android.graphics.Bitmap
@@ -11,23 +13,22 @@ import androidx.appcompat.app.AppCompatActivity
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 // Model
 sealed interface Model
 
+object Blank : Model
 object Loading : Model
 object Failure : Model
-data class ShowBreeds(val breeds: List<Breed>) : Model
+data class BreedsList(val breeds: List<Breed>) : Model
 
 @Serializable
 data class Breed(val name: String)
+
 
 // Update
 sealed interface Msg
@@ -38,7 +39,7 @@ fun update(msg: Msg, model: Model): ModelAndCmd {
     return when (msg) {
         is QueryUpdated -> {
             if (msg.query.isNullOrBlank()) {
-                ModelAndCmd(model = Loading, Cmd.None)
+                ModelAndCmd(model = Blank, Cmd.None)
             } else {
                 ModelAndCmd(
                     model = Loading,
@@ -47,7 +48,7 @@ fun update(msg: Msg, model: Model): ModelAndCmd {
             }
         }
         is BreedsRetrieved -> {
-            val newModel = msg.result.map { ShowBreeds(it) }.getOrNull() ?: model
+            val newModel = msg.result.map { BreedsList(it) }.getOrNull() ?: model
             ModelAndCmd(model = newModel, Cmd.None)
         }
     }
@@ -59,13 +60,21 @@ fun update(msg: Msg, model: Model): ModelAndCmd {
 @OptIn(FlowPreview::class)
 class MainActivity : AppCompatActivity() {
 
-    private val queryUpdatedFlow = MutableStateFlow(QueryUpdated(null))
+    private val queryFlow = MutableStateFlow<String?>(null)
+
+    /**
+     * First-order FRP (Elm / Redux / MVI)
+     * - Synchronous core (async happens outside the update function)
+     * - Pure
+     * - Easy to compose with new functionality
+     */
+    private val queryUpdatedFlow = queryFlow.map { QueryUpdated(it) }
     private val breedsRetrievedFlow = MutableStateFlow(BreedsRetrieved(Result.success(emptyList())))
-    private val msgFlow = merge(queryUpdatedFlow, breedsRetrievedFlow)
+    private val msgFlow = merge(queryUpdatedFlow.debounce(500), breedsRetrievedFlow)
 
     private val modelFlow = msgFlow.runningFold(
         initial = ModelAndCmd(
-            model = ShowBreeds(emptyList()),
+            model = Blank,
             cmd = Cmd.None
         ),
         operation = { modelAndCmd, msg ->
@@ -75,41 +84,41 @@ class MainActivity : AppCompatActivity() {
         processCmd(it.cmd)
     }.map { it.model }
 
+    /**
+     * Asynchronous data flows (Reactive extensions)
+     * - Shorter
+     * - More readable
+     * */
+    private val modelFlowRx: Flow<Model> = queryFlow.filterNotNull()
+        .filter { it.isNotBlank() }
+        .debounce(500)
+        .flatMapLatest {
+            flow {
+                emit(Loading)
+                emit(runCatching { searchBreeds(query = it) }
+                    .map { BreedsList(it) }
+                    .getOrDefault(Failure))
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Elm runtime
-        //textSignal.onEach { update(QueryUpdated(it), model.value) }
-//        requestBreedsSignal.onEach {
-//            val breeds = runCatching { searchBreeds(it) }
-//            updateAndRender(BreedsRetrieved(breeds), model.value)
-//        }.launchIn(MainScope())
-
-        // This reads like a sequential recipe, but it's agnostic to time. You could say it's "reactive"
-//        val breeds = textSignal
-//            .filterNotNull()
-//            .filter { it.isNotBlank() }
-//            .debounce(500)
-//
-//            // In traditional sequential code, this would necessarily block the cpu from executing other instructions.
-//            .map { searchBreedsBlocking(query = it) }
-//            .catch { it.printStackTrace() }
-
-
         setContent {
             View(
-                modelFlow,
-                textChanged = { queryUpdatedFlow.value = QueryUpdated(it) }
+                modelFlowRx,
+                textChanged = { queryFlow.value = it }
             )
         }
     }
 
+    // Elm runtime handles things like this
     private fun processCmd(cmd: Cmd) {
         when (cmd) {
             is Cmd.FetchBreeds -> {
                 MainScope().launch {
-                    val breeds = runCatching { searchBreeds(cmd.query) }
-                    breedsRetrievedFlow.value = BreedsRetrieved(breeds)
+                    val breedsResult = runCatching { searchBreeds(cmd.query) }
+                    breedsRetrievedFlow.value = BreedsRetrieved(breedsResult)
                 }
             }
             Cmd.None -> Unit

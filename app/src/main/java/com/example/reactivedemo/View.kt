@@ -54,10 +54,11 @@ fun View(
                 }
             )
 
-            val modelState = modelFlow.collectAsState(initial = ShowBreeds(emptyList()))
+            val modelState = modelFlow.collectAsState(initial = BreedsList(emptyList()))
             when (val model = modelState.value) {
+                Blank ->
                 Loading -> CircularProgressIndicator()
-                is ShowBreeds -> LazyColumn {
+                is BreedsList -> LazyColumn {
                     items(model.breeds) { breed ->
                         Text(breed.name)
                     }
