@@ -56,7 +56,7 @@ fun View(
 
             val modelState = modelFlow.collectAsState(initial = BreedsList(emptyList()))
             when (val model = modelState.value) {
-                Blank ->
+                Blank -> Unit
                 Loading -> CircularProgressIndicator()
                 is BreedsList -> LazyColumn {
                     items(model.breeds) { breed ->
