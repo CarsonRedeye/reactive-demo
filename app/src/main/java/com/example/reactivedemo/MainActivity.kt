@@ -10,6 +10,13 @@ import android.view.animation.RotateAnimation
 import android.widget.TextView
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.lifecycle.lifecycleScope
+import app.cash.molecule.AndroidUiDispatcher
+import app.cash.molecule.AndroidUiDispatcher.Companion.Main
+import app.cash.molecule.launchMolecule
+import app.cash.molecule.moleculeFlow
 import com.airbnb.mvrx.Mavericks
 import com.airbnb.mvrx.MavericksState
 import com.airbnb.mvrx.MavericksView
@@ -100,8 +107,7 @@ class MainActivity : AppCompatActivity(), MavericksView {
         .flatMapLatest {
             flow {
                 emit(Loading)
-                emit(runCatching { searchBreeds(query = it) }
-                    .map { BreedsList(it) }
+                emit(runCatching { BreedsList(searchBreeds(query = it)) }
                     .getOrDefault(Failure))
             }
         }
@@ -109,12 +115,19 @@ class MainActivity : AppCompatActivity(), MavericksView {
     override fun onCreate(savedInstanceState: Bundle?) {
 
         super.onCreate(savedInstanceState)
-
+        val viewModel =
+            CoroutineScope(Main).launchMolecule {
+                MoleculePresenter(
+                    queryFlow = queryFlow
+                )
+            }
         setContent {
-            val viewModel: MainViewModel = mavericksActivityViewModel()
+            // val viewModel: MainViewModel = mavericksActivityViewModel()
+
+
             View(
                 viewModel.collectAsState(),
-                textChanged = { viewModel.queryUpdated(it) }
+                textChanged = { queryFlow.value = it }
             )
         }
     }
