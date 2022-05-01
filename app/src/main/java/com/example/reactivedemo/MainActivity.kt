@@ -5,23 +5,12 @@ package com.example.reactivedemo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
-import android.view.animation.Animation
-import android.view.animation.RotateAnimation
-import android.widget.TextView
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.lifecycle.lifecycleScope
-import app.cash.molecule.AndroidUiDispatcher
 import app.cash.molecule.AndroidUiDispatcher.Companion.Main
 import app.cash.molecule.launchMolecule
-import app.cash.molecule.moleculeFlow
-import com.airbnb.mvrx.Mavericks
-import com.airbnb.mvrx.MavericksState
 import com.airbnb.mvrx.MavericksView
-import com.airbnb.mvrx.compose.collectAsState
-import com.airbnb.mvrx.compose.mavericksActivityViewModel
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -47,7 +36,7 @@ sealed interface Msg
 data class QueryUpdated(val query: String?) : Msg
 data class BreedsRetrieved(val result: Result<List<Breed>>) : Msg
 
-fun update(msg: Msg, model: Model): ModelAndCmd {
+fun getModel(msg: Msg, model: Model): ModelAndCmd {
     return when (msg) {
         is QueryUpdated -> {
             if (msg.query.isNullOrBlank()) {
@@ -90,7 +79,7 @@ class MainActivity : AppCompatActivity(), MavericksView {
             cmd = Cmd.None
         ),
         operation = { modelAndCmd, msg ->
-            update(msg, modelAndCmd.model)
+            getModel(msg, modelAndCmd.model)
         }
     ).onEach {
         processCmd(it.cmd)
@@ -117,7 +106,7 @@ class MainActivity : AppCompatActivity(), MavericksView {
         super.onCreate(savedInstanceState)
         val viewModel =
             CoroutineScope(Main).launchMolecule {
-                MoleculePresenter(
+                getModel(
                     queryFlow = queryFlow
                 )
             }
