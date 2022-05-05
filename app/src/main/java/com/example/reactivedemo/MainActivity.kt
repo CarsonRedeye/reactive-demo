@@ -42,7 +42,7 @@ sealed interface Cmd {
     data class FetchBreeds(val query: String) : Cmd
 }
 
-fun update(msg: Msg, model: Model): ModelAndCmd {
+fun updateComposable(msg: Msg, model: Model): ModelAndCmd {
     return when (msg) {
         is QueryUpdated -> {
             if (msg.query.isNullOrBlank()) {
@@ -73,22 +73,25 @@ class MainActivity : AppCompatActivity() {
      * - Pure
      * - Easy to compose with new functionality
      */
-    private val queryUpdatedSignal = querySignal.map { QueryUpdated(it) }.debounce(1000)
+    private val queryUpdatedSignal = querySignal.map { QueryUpdated(it) }
     private val breedsRetrievedSignal =
         MutableStateFlow(BreedsRetrieved(Result.success(emptyList())))
     private val msgFlow = merge(queryUpdatedSignal, breedsRetrievedSignal)
 
+    // runningFold = foldp in Elm.
     private val elmModelFlow = msgFlow.runningFold(
         initial = ModelAndCmd(
             model = Blank,
             cmd = Cmd.None
         ),
         operation = { modelAndCmd, msg ->
-            update(msg = msg, model = modelAndCmd.model)
+            updateComposable(msg = msg, model = modelAndCmd.model)
         }
     ).onEach {
         processCmd(it.cmd)
-    }.map { it.model }
+    }.map {
+        it.model // return just the model, not the Cmd
+    }
 
     /**
      * Asynchronous data flows (Reactive extensions)
@@ -114,26 +117,22 @@ class MainActivity : AppCompatActivity() {
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-
         super.onCreate(savedInstanceState)
 
+        /** Molecule **/
+        val moleculeModelFlow = CoroutineScope(Main).launchMolecule {
+            updateComposable(queryFlow = querySignal)
+        }
         setContent {
-            View(
-                rXModelFlow.collectAsState(initial = Blank),
-                textChanged = { querySignal.value = it }
-            )
-
-
-//            val viewModel =
-//                CoroutineScope(Main).launchMolecule {
-//                    update(
-//                        queryFlow = querySignal
-//                    )
-//                }
 //            View(
-//                viewModel.collectAsState(),
+//                elmModelFlow.collectAsState(initial = Blank),
 //                textChanged = { querySignal.value = it }
 //            )
+
+            View(
+                moleculeModelFlow.collectAsState(),
+                textChanged = { querySignal.value = it }
+            )
         }
     }
 

@@ -7,6 +7,9 @@ import com.airbnb.mvrx.Uninitialized
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+/**
+ * Mavericks is a framework like Elm, but with slightly more freedom to handle state how you want.
+ * */
 data class MavericksModel(val breedsState: Async<List<Breed>> = Uninitialized) : MavericksState
 
 class MainViewModel(initialState: MavericksModel) :
