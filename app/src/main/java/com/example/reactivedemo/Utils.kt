@@ -23,7 +23,7 @@ val client = HttpClient(Android) {
     }
     install(Logging) {
         logger = CustomAndroidHttpLogger
-        level = LogLevel.HEADERS
+        level = LogLevel.INFO
     }
 }
 

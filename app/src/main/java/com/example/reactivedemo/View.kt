@@ -6,10 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.CircularProgressIndicator
-import androidx.compose.material.OutlinedTextField
-import androidx.compose.material.Scaffold
-import androidx.compose.material.Text
+import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,16 +43,17 @@ fun View(
                 .padding(top = 16.dp)
                 .fillMaxWidth()
         ) {
-//            AnimatedShake(
-//                animationStart = AnimationStarter.StartImmediately,
-//                repeatInfinitely = true
-//            ) {
-//                Text("Cool animations")
-//            }
+            AnimatedShake(
+                animationStart = AnimationStarter.StartImmediately,
+                repeatInfinitely = true
+            ) {
+                Text("Cool animations")
+            }
 
             var text by remember { mutableStateOf("") }
             OutlinedTextField(
                 value = text,
+                textStyle = MaterialTheme.typography.h6,
                 onValueChange = {
                     text = it
                     textChanged(it)
@@ -67,7 +65,7 @@ fun View(
                 Loading -> CircularProgressIndicator()
                 is BreedsList -> LazyColumn {
                     items(model.breeds) { breed ->
-                        Text(breed.name)
+                        Text(breed.name, style = MaterialTheme.typography.h6)
                     }
                 }
                 Failure -> Text("😫😫")
