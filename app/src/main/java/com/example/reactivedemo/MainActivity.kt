@@ -70,7 +70,7 @@ class MainActivity : AppCompatActivity() {
     /**
      * First-order FRP (Elm / Redux / MVI)
      * - Synchronous core (async happens outside the update function)
-     * - Pure
+     * - Pure - should be more predictable - one place for inputs, one place for outputs.
      * - Easy to compose with new functionality
      */
     private val queryUpdatedSignal = querySignal.map { QueryUpdated(it) }
@@ -96,8 +96,9 @@ class MainActivity : AppCompatActivity() {
     /**
      * Asynchronous data flows (Reactive extensions)
      * - Shorter
-     * - More readable
+     * - More readable because each function chain deals with one concept, running top to bottom
      * - Common async scenarios for free - with standard library operators like Flow.debounce
+     *     - Debounce with Elm is tricky - either pre-process the query signal, or deal with it manually in update().
      * */
     private val rXModelFlow: Flow<Model> = querySignal
         .filterNotNull()
