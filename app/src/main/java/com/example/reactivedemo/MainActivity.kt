@@ -42,7 +42,7 @@ sealed interface Cmd {
     data class FetchBreeds(val query: String) : Cmd
 }
 
-fun updateComposable(msg: Msg, model: Model): ModelAndCmd {
+fun update(msg: Msg, model: Model): ModelAndCmd {
     return when (msg) {
         is QueryUpdated -> {
             if (msg.query.isNullOrBlank()) {
@@ -78,14 +78,15 @@ class MainActivity : AppCompatActivity() {
         MutableStateFlow(BreedsRetrieved(Result.success(emptyList())))
     private val msgFlow = merge(queryUpdatedSignal, breedsRetrievedSignal)
 
-    // runningFold = foldp in Elm.
+    // runningFold = foldp in Elm. This part is the the "Elm runtime" that would stay constant or be part of the framework.
+    // App developers would be modifying the update() function above.
     private val elmModelFlow = msgFlow.runningFold(
         initial = ModelAndCmd(
             model = Blank,
             cmd = Cmd.None
         ),
         operation = { modelAndCmd, msg ->
-            updateComposable(msg = msg, model = modelAndCmd.model)
+            update(msg = msg, model = modelAndCmd.model)
         }
     ).onEach {
         processCmd(it.cmd)
@@ -117,6 +118,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+    // Android's "main" function for a screen
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -160,67 +162,11 @@ private fun searchBreedsBlocking(query: String): List<Breed> {
     }
 }
 
-// Callbacks
-private fun searchBreedsCallback(query: String, callback: (Breed) -> Unit) {
-    MainScope().launch {
-        val breedResponse: Breed =
-            client.get("https://api.thedogapi.com/v1/breeds/search") {
-                parameter("q", query)
-            }.body()
-        callback(breedResponse)
-    }
-}
-
-private fun fetchImage(url: String, imageCallback: (Bitmap) -> Unit) {
-    MainScope().launch {
-        val imageResponse: HttpResponse = client.get(url)
-        val bytes = imageResponse.readBytes()
-        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)!!
-        imageCallback(bitmap)
-    }
-}
-
 // Coroutines
 suspend fun searchBreeds(query: String): List<Breed> {
     return client.get("https://api.thedogapi.com/v1/breeds/search") {
         parameter("q", query)
     }.body()
-}
-
-suspend fun fetchImage(url: String): Bitmap {
-    val imageResponse: HttpResponse = client.get(url)
-    val bytes = imageResponse.readBytes()
-    return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)!!
-}
-
-suspend fun decodeImageSlow(url: String): Bitmap {
-    val imageResponse: HttpResponse = client.get(url)
-    val bytes = imageResponse.readBytes()
-    repeat(100) {
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)!!
-    }
-    return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)!!
-}
-
-//private fun randomDogsFlow(): Flow<DogResponse> {
-//    return flow {
-//        emit(searchDogs())
-//    }
-//}
-
-private fun imageFlow(url: String): Flow<Bitmap> {
-    return flow {
-        emit(fetchImage(url))
-    }
-}
-
-@Serializable
-data class DogResponse(@SerialName("message") val url: String, val status: String)
-
-sealed class ViewState {
-    object Placeholder : ViewState()
-    object Loading : ViewState()
-    data class DogView(val bitmap: Bitmap, val caption: String) : ViewState()
 }
 
 data class ModelAndCmd(val model: Model, val cmd: Cmd)

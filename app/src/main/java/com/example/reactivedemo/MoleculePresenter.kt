@@ -8,8 +8,9 @@ import kotlinx.coroutines.flow.debounce
 /**
  * Molecule - experimental new UI state calculation from Square Inc.
  * - Like Excel (everything can be made reactive)
- * - Kind of like a combination of ELM and free imperative coding.
+ * - Kind of like a combination of ELM and free imperative coding (side effects for sure :).
  * - Possibly the most basic expression of view state (including async) using traditional imperative code.
+ * - Definitely acts strangely compared to normal functions.
  * */
 
 @SuppressLint("FlowOperatorInvokedInComposition")
